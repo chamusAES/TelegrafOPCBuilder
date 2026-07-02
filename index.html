@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telegraf OPC-UA Config Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1317; --panel:#161c22; --panel2:#1b232b; --border:#2a3540;
+    --text:#d9e2ea; --muted:#7f8ea0; --accent:#e8a33d; --accent-dim:#9c7530;
+    --ok:#5fb98a; --err:#e07a6b; --string:#a3c59d; --mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 'IBM Plex Sans',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.02em}
+  header h1 span{color:var(--accent)}
+  #connState{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  #connState.on{color:var(--ok)}
+  main{flex:1;display:grid;grid-template-columns:300px minmax(340px,1fr) minmax(420px,1.1fr);min-height:0}
+  main>section{border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  main>section:last-child{border-right:none}
+  .pane-title{padding:9px 14px;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:8px}
+  .pane-body{flex:1;overflow-y:auto;padding:12px 14px}
+  label{display:block;font-size:11px;color:var(--muted);margin:10px 0 3px;letter-spacing:.04em}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:6px 8px;font:13px var(--mono)}
+  input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent-dim);outline-offset:1px}
+  select{font-family:'IBM Plex Sans'}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  button{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:6px 12px;font:500 13px 'IBM Plex Sans';cursor:pointer}
+  button:hover{border-color:var(--accent-dim)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#14100a;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.small{padding:2px 8px;font-size:11px}
+  button.ghost{background:none;border:none;color:var(--muted);padding:2px 5px}
+  button.ghost:hover{color:var(--err)}
+  .msg{font-size:12px;font-family:var(--mono);margin-top:8px;white-space:pre-wrap;word-break:break-word}
+  .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
+  .divider{border-top:1px solid var(--border);margin:16px -14px;padding:0}
+  .checkline{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12.5px;color:var(--text)}
+  .checkline input{width:auto}
+
+  /* tree */
+  #tree{font-family:var(--mono);font-size:12.5px}
+  .tnode{user-select:none}
+  .trow{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:3px;white-space:nowrap}
+  .trow:hover{background:var(--panel2)}
+  .caret{width:14px;text-align:center;color:var(--muted);cursor:pointer;flex:none}
+  .ncls{flex:none;width:16px;text-align:center;font-size:10px;color:var(--muted)}
+  .ncls.var{color:var(--accent)}
+  .tname{overflow:hidden;text-overflow:ellipsis;cursor:default}
+  .trow .add{margin-left:auto;visibility:hidden}
+  .trow:hover .add{visibility:visible}
+  .tkids{margin-left:16px;border-left:1px solid var(--border);padding-left:4px}
+
+  /* groups */
+  .gcard{border:1px solid var(--border);border-radius:6px;margin-bottom:12px;background:var(--panel)}
+  .gcard.active{border-left:3px solid var(--accent)}
+  .ghead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .ghead input{flex:1}
+  .gbody{padding:8px 10px}
+  .gmeta{display:grid;grid-template-columns:70px 60px 1fr;gap:8px;align-items:end}
+  .tagrow,.noderow{display:flex;gap:6px;align-items:center;margin-top:5px;font-family:var(--mono);font-size:12px}
+  .tagrow input{padding:3px 6px;font-size:12px}
+  .noderow input{padding:3px 6px;font-size:12px}
+  .noderow .nid{flex:1.6;color:var(--muted)}
+  .noderow .nname{flex:1}
+  .sub{font-size:11px;color:var(--muted);margin-top:10px;letter-spacing:.06em;text-transform:uppercase}
+  .count{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  /* preview */
+  #preview{flex:1;overflow:auto;margin:0;padding:14px 16px;font:12.5px/1.5 var(--mono);white-space:pre;tab-size:2}
+  #preview .c{color:var(--accent-dim)}
+  #preview .h{color:var(--text);font-weight:500}
+  #preview .k{color:var(--muted)}
+  #preview .s{color:var(--string)}
+  #preview .b{color:var(--accent)}
+  .toolbar{margin-left:auto;display:flex;gap:8px}
+  @media (max-width:1100px){ main{grid-template-columns:1fr;overflow-y:auto} main>section{border-right:none;border-bottom:1px solid var(--border);max-height:70vh} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Telegraf <span>·</span> OPC-UA Config Builder</h1>
+  <div id="connState">disconnected</div>
+</header>
+<main>
+
+  <!-- ============ LEFT: connection + output settings ============ -->
+  <section>
+    <div class="pane-title">Connection</div>
+    <div class="pane-body">
+      <label for="endpoint">Endpoint</label>
+      <input id="endpoint" value="opc.tcp://127.0.0.1:62541" spellcheck="false">
+      <div class="row2">
+        <div><label for="secPolicy">Security policy</label>
+          <select id="secPolicy"><option>None</option><option>Basic128Rsa15</option><option>Basic256</option><option>Basic256Sha256</option></select></div>
+        <div><label for="secMode">Security mode</label>
+          <select id="secMode"><option>None</option><option>Sign</option><option>SignAndEncrypt</option></select></div>
+      </div>
+      <label for="authMethod">Auth method</label>
+      <select id="authMethod"><option>Anonymous</option><option>UserName</option><option>Certificate</option></select>
+      <div class="row2" id="userRow">
+        <div><label for="username">Username</label><input id="username" value="telegraf" spellcheck="false"></div>
+        <div><label for="password">Password</label><input id="password" type="password"></div>
+      </div>
+      <div id="certRow" style="display:none">
+        <label for="certPath">Certificate path (on this machine)</label><input id="certPath" placeholder="/path/cert.pem" spellcheck="false">
+        <label for="keyPath">Private key path</label><input id="keyPath" placeholder="/path/key.pem" spellcheck="false">
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="primary" id="btnConnect">Connect</button>
+        <button id="btnDisconnect">Disconnect</button>
+      </div>
+      <div class="msg" id="connMsg"></div>
+
+      <div class="divider"></div>
+      <div class="pane-title" style="margin:0 -14px;border-top:none">Output settings</div>
+      <label for="plugin">Plugin</label>
+      <select id="plugin">
+        <option value="opcua">inputs.opcua (polling read)</option>
+        <option value="opcua_listener">inputs.opcua_listener (subscription)</option>
+      </select>
+      <label for="layout">Node layout</label>
+      <select id="layout">
+        <option value="groups">Grouped (per-group default_tags)</option>
+        <option value="flat">Flat node list</option>
+      </select>
+      <label for="measName">Metric name</label>
+      <input id="measName" value="central_plant" spellcheck="false">
+      <div class="row2">
+        <div><label for="tagexclude">tagexclude (comma sep)</label><input id="tagexclude" value="id,host" spellcheck="false"></div>
+        <div><label for="fieldexclude">fieldexclude</label><input id="fieldexclude" value="Quality" spellcheck="false"></div>
+      </div>
+      <label for="timestamp">Timestamp source</label>
+      <select id="timestamp"><option value="">(plugin default)</option><option>gather</option><option>server</option><option>source</option></select>
+      <div id="subIntRow" style="display:none">
+        <label for="subInterval">Subscription interval</label><input id="subInterval" value="1s" spellcheck="false">
+      </div>
+      <div class="checkline"><input type="checkbox" id="inclTimeouts" checked><label for="inclTimeouts" style="margin:0">Include timeout / retry block</label></div>
+      <div class="row3" id="timeoutRow">
+        <div><label for="connTimeout">connect</label><input id="connTimeout" value="10s"></div>
+        <div><label for="reqTimeout">request</label><input id="reqTimeout" value="5s"></div>
+        <div><label for="sessTimeout">session</label><input id="sessTimeout" value="10m"></div>
+      </div>
+      <div class="row3" id="retryRow">
+        <div><label for="retryCount">retries</label><input id="retryCount" value="3"></div>
+        <div><label for="retryTimeout">retry wait</label><input id="retryTimeout" value="500ms"></div>
+        <div><label for="reconnThresh">reconn thr</label><input id="reconnThresh" value="1"></div>
+      </div>
+      <div class="checkline" id="workaroundLine"><input type="checkbox" id="unregReads" checked><label for="unregReads" style="margin:0">use_unregistered_reads workaround</label></div>
+      <div class="checkline"><input type="checkbox" id="maskPass" checked><label for="maskPass" style="margin:0">Mask password in output ("***")</label></div>
+    </div>
+  </section>
+
+  <!-- ============ MIDDLE: browse + groups ============ -->
+  <section>
+    <div class="pane-title">Address space
+      <span class="count" id="nsInfo"></span>
+      <div class="toolbar"><button class="small" id="btnRefreshTree">Reload</button></div>
+    </div>
+    <div class="pane-body" style="flex:1.2">
+      <div id="tree"><div class="msg">Connect to browse the server.</div></div>
+    </div>
+    <div class="pane-title">Groups
+      <div class="toolbar">
+        <button class="small" id="btnAddGroup">+ New group</button>
+      </div>
+    </div>
+    <div class="pane-body" style="flex:1">
+      <div class="row2" style="align-items:end">
+        <div><label for="manualId">Add node by ID (no browse needed)</label>
+          <input id="manualId" placeholder="ns=1;s=[Bldg]AnalogInput25.Present_Value" spellcheck="false"></div>
+        <div><button class="small" id="btnManualAdd" style="width:100%">Add to active group</button></div>
+      </div>
+      <div id="groups" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT: live config ============ -->
+  <section>
+    <div class="pane-title">telegraf.conf
+      <div class="toolbar">
+        <button class="small" id="btnDownload">Download .conf</button>
+        <button class="small primary" id="btnCopy">Copy</button>
+      </div>
+    </div>
+    <pre id="preview"></pre>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------------- state ---------------- */
+let uid = 1;
+const S = {
+  connected:false, namespaces:[],
+  groups:[], activeGroup:null,
+};
+function newGroup(name){
+  const g = {id:uid++, name:name||("group_"+uid), namespace:"1", idType:"s",
+             tags:[{k:"tag",v:""}], nodes:[]};
+  S.groups.push(g); S.activeGroup = g.id; return g;
+}
+newGroup("central_plant");
+
+/* ---------------- helpers ---------------- */
+function parseNodeId(str){
+  // "ns=1;s=[Site]AnalogInput25.Present_Value" -> {ns,type,ident}
+  let ns="0", type="i", ident=str.trim();
+  const parts = ident.split(";");
+  for(const p of parts){
+    if(p.startsWith("ns=")) ns = p.slice(3);
+    else if(p.length>1 && p[1]==="="){ type = p[0]; ident = p.slice(2); }
+  }
+  return {ns, type, ident};
+}
+function autoName(displayName, ident){
+  let base = displayName || ident.split(/[\.\]\/]/).filter(Boolean).pop() || "node";
+  base = base.replace(/Present_Value$/,"").replace(/[^A-Za-z0-9_]+/g,"_").replace(/^_+|_+$/g,"");
+  return base || "node";
+}
+function activeGroup(){ return S.groups.find(g=>g.id===S.activeGroup) || S.groups[0]; }
+function addNodeToActive(nodeIdStr, displayName){
+  let g = activeGroup(); if(!g) g = newGroup("group_1");
+  const p = parseNodeId(nodeIdStr);
+  if(g.nodes.length===0){ g.namespace = p.ns; g.idType = p.type; }
+  if(g.nodes.some(n=>n.identifier===p.ident)) { flash(`Already in ${g.name}`); return; }
+  g.nodes.push({id:uid++, name:autoName(displayName,p.ident), identifier:p.ident, ns:p.ns, idType:p.type});
+  renderGroups(); renderConfig(); persist();
+}
+let flashTimer=null;
+function flash(text, isErr){
+  const el = $("connMsg"); el.textContent = text; el.className = "msg " + (isErr?"err":"ok");
+  clearTimeout(flashTimer); flashTimer = setTimeout(()=>{ el.textContent=""; }, 4000);
+}
+
+/* ---------------- API ---------------- */
+async function api(path, body){
+  const res = await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  const data = await res.json().catch(()=>({ok:false,error:"Bad response"}));
+  if(!res.ok || data.ok===false) throw new Error(data.error||res.statusText);
+  return data;
+}
+
+async function doConnect(){
+  const body = {
+    endpoint:$("endpoint").value.trim(),
+    security_policy:$("secPolicy").value, security_mode:$("secMode").value,
+    auth_method:$("authMethod").value,
+    username:$("username").value, password:$("password").value,
+    certificate:$("certPath").value||null, private_key:$("keyPath").value||null,
+  };
+  $("connMsg").textContent="Connecting…"; $("connMsg").className="msg";
+  try{
+    const data = await api("/api/connect", body);
+    S.connected = true; S.namespaces = data.namespaces||[];
+    $("connState").textContent = "connected · "+data.endpoint; $("connState").className="on";
+    $("nsInfo").textContent = S.namespaces.length + " namespaces";
+    flash("Connected.");
+    renderTreeRoot(data.children);
+  }catch(e){ S.connected=false; $("connState").textContent="disconnected"; $("connState").className="";
+    $("connMsg").textContent=e.message; $("connMsg").className="msg err"; }
+  renderConfig(); persist();
+}
+async function doDisconnect(){
+  try{ await api("/api/disconnect"); }catch(e){}
+  S.connected=false; $("connState").textContent="disconnected"; $("connState").className="";
+  $("tree").innerHTML = '<div class="msg">Connect to browse the server.</div>';
+}
+
+/* ---------------- tree ---------------- */
+function renderTreeRoot(children){
+  const tree = $("tree"); tree.innerHTML="";
+  if(!children || !children.length){ tree.innerHTML='<div class="msg">Objects folder is empty.</div>'; return; }
+  for(const c of children) tree.appendChild(treeNode(c));
+}
+function treeNode(c){
+  const wrap = document.createElement("div"); wrap.className="tnode";
+  const row = document.createElement("div"); row.className="trow";
+  const isVar = c.nodeClass==="Variable";
+  const caret = document.createElement("span"); caret.className="caret"; caret.textContent="▸";
+  const cls = document.createElement("span"); cls.className="ncls"+(isVar?" var":"");
+  cls.textContent = isVar?"V":(c.nodeClass==="Object"?"O":c.nodeClass[0]||"·");
+  cls.title = c.nodeClass;
+  const name = document.createElement("span"); name.className="tname";
+  name.textContent = c.displayName; name.title = c.nodeId;
+  row.append(caret, cls, name);
+
+  if(isVar){
+    const add = document.createElement("button"); add.className="small add"; add.textContent="+ add";
+    add.onclick = ()=> addNodeToActive(c.nodeId, c.displayName);
+    row.appendChild(add);
+  } else if(c.nodeClass==="Object"){
+    const addAll = document.createElement("button"); addAll.className="small add"; addAll.textContent="+ vars";
+    addAll.title = "Add all direct child variables to active group";
+    addAll.onclick = async ()=>{
+      try{
+        const data = await api("/api/browse",{node_id:c.nodeId});
+        const vars = data.children.filter(k=>k.nodeClass==="Variable");
+        if(!vars.length){ flash("No direct variables under "+c.displayName, true); return; }
+        vars.forEach(v=>addNodeToActive(v.nodeId, v.displayName));
+        flash(`Added ${vars.length} variables from ${c.displayName}.`);
+      }catch(e){ flash(e.message, true); }
+    };
+    row.appendChild(addAll);
+  }
+
+  let kids=null, loaded=false, open=false;
+  async function toggle(){
+    if(!open){
+      if(!loaded){
+        caret.textContent="…";
+        try{
+          const data = await api("/api/browse",{node_id:c.nodeId});
+          kids = document.createElement("div"); kids.className="tkids";
+          if(!data.children.length){ const e=document.createElement("div"); e.className="msg"; e.style.margin="2px 0"; e.textContent="(no children)"; kids.appendChild(e); }
+          for(const k of data.children) kids.appendChild(treeNode(k));
+          wrap.appendChild(kids); loaded=true;
+        }catch(e){ flash(e.message,true); caret.textContent="▸"; return; }
+      }
+      kids.style.display=""; caret.textContent="▾"; open=true;
+    } else { kids.style.display="none"; caret.textContent="▸"; open=false; }
+  }
+  caret.onclick = toggle;
+  name.ondblclick = toggle;
+  wrap.appendChild(row);
+  return wrap;
+}
+
+/* ---------------- groups UI ---------------- */
+function renderGroups(){
+  const host = $("groups"); host.innerHTML="";
+  for(const g of S.groups){
+    const card = document.createElement("div"); card.className="gcard"+(g.id===S.activeGroup?" active":"");
+    const head = document.createElement("div"); head.className="ghead";
+    const activeBtn = document.createElement("button"); activeBtn.className="small";
+    activeBtn.textContent = g.id===S.activeGroup ? "active" : "set active";
+    activeBtn.disabled = g.id===S.activeGroup;
+    activeBtn.onclick = ()=>{ S.activeGroup=g.id; renderGroups(); };
+    const nameIn = document.createElement("input"); nameIn.value=g.name; nameIn.spellcheck=false;
+    nameIn.oninput = ()=>{ g.name=nameIn.value; renderConfig(); persist(); };
+    const cnt = document.createElement("span"); cnt.className="count"; cnt.textContent = g.nodes.length+" nodes";
+    const del = document.createElement("button"); del.className="ghost"; del.textContent="✕"; del.title="Delete group";
+    del.onclick = ()=>{ S.groups = S.groups.filter(x=>x!==g); if(S.activeGroup===g.id) S.activeGroup=S.groups[0]?.id??null; renderGroups(); renderConfig(); persist(); };
+    head.append(activeBtn, nameIn, cnt, del);
+    card.appendChild(head);
+
+    const body = document.createElement("div"); body.className="gbody";
+    const meta = document.createElement("div"); meta.className="gmeta";
+    meta.innerHTML = `<div><label>namespace</label></div><div><label>id type</label></div><div><label>&nbsp;</label></div>`;
+    const nsIn = document.createElement("input"); nsIn.value=g.namespace;
+    nsIn.oninput=()=>{ g.namespace=nsIn.value; renderConfig(); persist(); };
+    const typeSel = document.createElement("select");
+    for(const t of ["s","i","g","b"]){ const o=document.createElement("option"); o.value=t; o.textContent=t; if(t===g.idType)o.selected=true; typeSel.appendChild(o); }
+    typeSel.onchange=()=>{ g.idType=typeSel.value; renderConfig(); persist(); };
+    meta.children[0].appendChild(nsIn); meta.children[1].appendChild(typeSel);
+    body.appendChild(meta);
+
+    const tagLbl = document.createElement("div"); tagLbl.className="sub"; tagLbl.textContent="default_tags";
+    body.appendChild(tagLbl);
+    g.tags.forEach((t,i)=>{
+      const r = document.createElement("div"); r.className="tagrow";
+      const k = document.createElement("input"); k.placeholder="key"; k.value=t.k; k.spellcheck=false;
+      const v = document.createElement("input"); v.placeholder="value"; v.value=t.v; v.spellcheck=false;
+      k.oninput=()=>{t.k=k.value; renderConfig(); persist();};
+      v.oninput=()=>{t.v=v.value; renderConfig(); persist();};
+      const x = document.createElement("button"); x.className="ghost"; x.textContent="✕";
+      x.onclick=()=>{ g.tags.splice(i,1); renderGroups(); renderConfig(); persist(); };
+      r.append(k,v,x); body.appendChild(r);
+    });
+    const addTag = document.createElement("button"); addTag.className="small"; addTag.style.marginTop="6px"; addTag.textContent="+ tag";
+    addTag.onclick=()=>{ g.tags.push({k:"",v:""}); renderGroups(); };
+    body.appendChild(addTag);
+
+    const nodeLbl = document.createElement("div"); nodeLbl.className="sub"; nodeLbl.textContent="nodes";
+    body.appendChild(nodeLbl);
+    if(!g.nodes.length){ const e=document.createElement("div"); e.className="msg"; e.textContent="Add variables from the tree, or paste a node ID above."; body.appendChild(e); }
+    g.nodes.forEach((n,i)=>{
+      const r = document.createElement("div"); r.className="noderow";
+      const nm = document.createElement("input"); nm.className="nname"; nm.value=n.name; nm.spellcheck=false; nm.title="metric field name";
+      nm.oninput=()=>{ n.name=nm.value; renderConfig(); persist(); };
+      const idn = document.createElement("input"); idn.className="nid"; idn.value=n.identifier; idn.spellcheck=false; idn.title="identifier";
+      idn.oninput=()=>{ n.identifier=idn.value; renderConfig(); persist(); };
+      const x = document.createElement("button"); x.className="ghost"; x.textContent="✕";
+      x.onclick=()=>{ g.nodes.splice(i,1); renderGroups(); renderConfig(); persist(); };
+      r.append(nm, idn, x); body.appendChild(r);
+    });
+    card.appendChild(body);
+    host.appendChild(card);
+  }
+}
+
+/* ---------------- config generation ---------------- */
+function tomlStr(s){ return '"' + String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"') + '"'; }
+function kvBlock(pairs, indent){
+  // pairs: [key, rawValue] with rawValue already TOML-formatted; align '='
+  const w = Math.max(...pairs.map(p=>p[0].length));
+  return pairs.map(p=>`${indent}${p[0].padEnd(w)} = ${p[1]}`).join("\n");
+}
+function banner(text){
+  const line = "─".repeat(Math.max(4, 62 - text.length));
+  return `  # ── ${text} ${line}`;
+}
+function buildConfig(){
+  const plugin  = $("plugin").value;                 // opcua | opcua_listener
+  const layout  = $("layout").value;                 // groups | flat
+  const P = "inputs." + plugin;
+  const lines = [];
+  lines.push(`[[${P}]]`);
+
+  const top = [
+    ["name", tomlStr($("measName").value || "opcua")],
+    ["endpoint", tomlStr($("endpoint").value.trim() || "opc.tcp://127.0.0.1:4840")],
+    ["security_policy", tomlStr($("secPolicy").value)],
+    ["security_mode", tomlStr($("secMode").value)],
+    ["auth_method", tomlStr($("authMethod").value)],
+  ];
+  if($("authMethod").value==="UserName"){
+    top.push(["username", tomlStr($("username").value)]);
+    top.push(["password", tomlStr($("maskPass").checked ? "***" : $("password").value)]);
+  }
+  if($("authMethod").value==="Certificate" || $("secPolicy").value!=="None"){
+    if($("certPath").value) top.push(["certificate", tomlStr($("certPath").value)]);
+    if($("keyPath").value)  top.push(["private_key", tomlStr($("keyPath").value)]);
+  }
+  const tex = $("tagexclude").value.split(",").map(s=>s.trim()).filter(Boolean);
+  const fex = $("fieldexclude").value.split(",").map(s=>s.trim()).filter(Boolean);
+  if(tex.length) top.push(["tagexclude", "[" + tex.map(tomlStr).join(",") + "]"]);
+  if(fex.length) top.push(["fieldexclude", "[" + fex.map(tomlStr).join(",") + "]"]);
+  if($("timestamp").value) top.push(["timestamp", tomlStr($("timestamp").value)]);
+  if(plugin==="opcua_listener") top.push(["subscription_interval", tomlStr($("subInterval").value || "1s")]);
+  lines.push(kvBlock(top, "  "));
+
+  if($("inclTimeouts").checked){
+    lines.push("");
+    lines.push(kvBlock([
+      ["connect_timeout", tomlStr($("connTimeout").value)],
+      ["request_timeout", tomlStr($("reqTimeout").value)],
+      ["session_timeout", tomlStr($("sessTimeout").value)],
+      ["read_retry_count", $("retryCount").value || "3"],
+      ["read_retry_timeout", tomlStr($("retryTimeout").value)],
+      ["reconnect_error_threshold", $("reconnThresh").value || "1"],
+    ], "  "));
+  }
+  if(plugin==="opcua" && $("unregReads").checked){
+    lines.push(`  [${P}.request_workarounds]`);
+    lines.push(`    use_unregistered_reads = true`);
+  }
+
+  const groupsWithNodes = S.groups.filter(g=>g.nodes.length);
+  if(layout==="groups"){
+    for(const g of groupsWithNodes){
+      lines.push("");
+      lines.push(banner(g.name));
+      lines.push(`  [[${P}.group]]`);
+      const gm = [
+        ["name", tomlStr(g.name)],
+        ["namespace", tomlStr(g.namespace)],
+        ["identifier_type", tomlStr(g.idType)],
+      ];
+      const tags = g.tags.filter(t=>t.k);
+      if(tags.length) gm.push(["default_tags", "{" + tags.map(t=>`${t.k}=${tomlStr(t.v)}`).join(", ") + "}"]);
+      lines.push(kvBlock(gm, "    "));
+      for(const n of g.nodes){
+        lines.push(`    [[${P}.group.nodes]]`);
+        lines.push(kvBlock([["name",tomlStr(n.name)],["identifier",tomlStr(n.identifier)]], "      "));
+      }
+    }
+  } else {
+    for(const g of groupsWithNodes){
+      lines.push("");
+      lines.push(banner(g.name + " (flat: group tags not emitted)"));
+      for(const n of g.nodes){
+        lines.push(`  [[${P}.nodes]]`);
+        lines.push(kvBlock([
+          ["name", tomlStr(n.name)],
+          ["namespace", tomlStr(n.ns ?? g.namespace)],
+          ["identifier_type", tomlStr(n.idType ?? g.idType)],
+          ["identifier", tomlStr(n.identifier)],
+        ], "    "));
+      }
+    }
+  }
+  if(!groupsWithNodes.length){
+    lines.push("");
+    lines.push("  # Add nodes from the address-space tree to populate this config.");
+  }
+  return lines.join("\n") + "\n";
+}
+
+/* ---------------- preview render ---------------- */
+function highlight(toml){
+  const esc = s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  return toml.split("\n").map(line=>{
+    const t = esc(line);
+    const trimmed = line.trim();
+    if(trimmed.startsWith("#")) return `<span class="c">${t}</span>`;
+    if(trimmed.startsWith("[")) return `<span class="h">${t}</span>`;
+    const m = t.match(/^(\s*)([A-Za-z0-9_]+)(\s*= )(.*)$/);
+    if(m){
+      let val = m[4];
+      val = val.replace(/&quot;/g,'"');
+      val = esc(val.replace(/"([^"]*)"/g, "\u0001$1\u0002"))
+              .replace(/\u0001/g,'<span class="s">"').replace(/\u0002/g,'"</span>')
+              .replace(/\b(true|false)\b/g,'<span class="b">$1</span>');
+      return `${m[1]}<span class="k">${m[2]}</span>${m[3]}${val}`;
+    }
+    return t;
+  }).join("\n");
+}
+let currentConfig = "";
+function renderConfig(){
+  currentConfig = buildConfig();
+  $("preview").innerHTML = highlight(currentConfig);
+}
+
+/* ---------------- persistence (local browser only) ---------------- */
+function persist(){
+  try{
+    const snap = {
+      groups:S.groups, activeGroup:S.activeGroup,
+      fields:Object.fromEntries(["endpoint","secPolicy","secMode","authMethod","username","measName",
+        "tagexclude","fieldexclude","timestamp","plugin","layout","subInterval","connTimeout","reqTimeout",
+        "sessTimeout","retryCount","retryTimeout","reconnThresh","certPath","keyPath"].map(id=>[id,$(id).value])),
+      checks:{inclTimeouts:$("inclTimeouts").checked, unregReads:$("unregReads").checked, maskPass:$("maskPass").checked},
+    };
+    localStorage.setItem("opcua_tg_builder", JSON.stringify(snap));
+  }catch(e){}
+}
+function restore(){
+  try{
+    const raw = localStorage.getItem("opcua_tg_builder"); if(!raw) return;
+    const snap = JSON.parse(raw);
+    if(snap.groups?.length){ S.groups = snap.groups; S.activeGroup = snap.activeGroup ?? snap.groups[0].id;
+      uid = Math.max(uid, ...S.groups.flatMap(g=>[g.id, ...g.nodes.map(n=>n.id||0)])) + 1; }
+    for(const [id,v] of Object.entries(snap.fields||{})) if($(id)) $(id).value = v;
+    for(const [id,v] of Object.entries(snap.checks||{})) if($(id)) $(id).checked = v;
+  }catch(e){}
+}
+
+/* ---------------- wiring ---------------- */
+function syncVisibility(){
+  const auth = $("authMethod").value, pol = $("secPolicy").value, plug = $("plugin").value;
+  $("userRow").style.display = auth==="UserName" ? "" : "none";
+  $("certRow").style.display = (auth==="Certificate" || pol!=="None") ? "" : "none";
+  $("subIntRow").style.display = plug==="opcua_listener" ? "" : "none";
+  $("workaroundLine").style.display = plug==="opcua" ? "" : "none";
+  const showT = $("inclTimeouts").checked ? "" : "none";
+  $("timeoutRow").style.display = showT; $("retryRow").style.display = showT;
+}
+["authMethod","secPolicy","plugin","inclTimeouts"].forEach(id=>$(id).addEventListener("change",()=>{syncVisibility();renderConfig();persist();}));
+["endpoint","secMode","username","password","measName","tagexclude","fieldexclude","timestamp","layout",
+ "subInterval","connTimeout","reqTimeout","sessTimeout","retryCount","retryTimeout","reconnThresh",
+ "unregReads","maskPass","certPath","keyPath"].forEach(id=>{
+  $(id).addEventListener("input",()=>{renderConfig();persist();});
+  $(id).addEventListener("change",()=>{renderConfig();persist();});
+});
+$("btnConnect").onclick = doConnect;
+$("btnDisconnect").onclick = doDisconnect;
+$("btnRefreshTree").onclick = doConnect;
+$("btnAddGroup").onclick = ()=>{ newGroup("group_"+(S.groups.length+1)); renderGroups(); renderConfig(); persist(); };
+$("btnManualAdd").onclick = ()=>{
+  const v = $("manualId").value.trim(); if(!v) return;
+  addNodeToActive(v, ""); $("manualId").value="";
+};
+$("manualId").addEventListener("keydown",e=>{ if(e.key==="Enter") $("btnManualAdd").click(); });
+$("btnCopy").onclick = async ()=>{
+  try{ await navigator.clipboard.writeText(currentConfig); $("btnCopy").textContent="Copied"; setTimeout(()=>$("btnCopy").textContent="Copy",1500); }
+  catch(e){ // clipboard API can fail on http; fall back
+    const ta=document.createElement("textarea"); ta.value=currentConfig; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove(); $("btnCopy").textContent="Copied"; setTimeout(()=>$("btnCopy").textContent="Copy",1500);
+  }
+};
+$("btnDownload").onclick = ()=>{
+  const blob = new Blob([currentConfig],{type:"text/plain"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download = ($("measName").value||"telegraf")+".conf"; a.click(); URL.revokeObjectURL(a.href);
+};
+
+restore(); syncVisibility(); renderGroups(); renderConfig();
+</script>
+</body>
+</html>
